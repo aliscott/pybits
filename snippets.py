@@ -11,7 +11,10 @@ def get_class(name):
 
     # loop through modules in name
     parts = name.split('.')
-    module = __import__('.'.join(parts[0:-1]))
-    for m in parts[1:-1]:
-        module = getattr(module, m)
-    return getattr(module, parts[-1])
+    try:
+        module = __import__('.'.join(parts[0:-1]))
+        for m in parts[1:-1]:
+            module = getattr(module, m)
+        return getattr(module, parts[-1])
+    except ValueError:
+        return None
