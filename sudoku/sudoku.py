@@ -27,8 +27,55 @@ from PIL import Image
 
 GOCR_CMD = """gocr -a 50 -C '1-9' -i"""
 
+def parse_image(img):
+    """ Retrieves the sudoku data from the image.
+    """
+    img = img.convert('1') # convert to black and white
+    pixels = img.load()
+    sudoku_data = []
+    (w, h) = img.size
+    for row in range(0, 9):
+        for col in range(0, 9):
+            (box_w, box_h) = (float(w) / 9, float(h) / 9)
+            # get bounds of box
+            (l, t, r, b) = (int(col * box_w), int(row * box_h),
+                            int((col + 1) * box_w), int((row + 1) * box_h))
+            # get black pixel close to centre of box
+            black_pixel = _get_nearby_pixel(pixels, int(l + box_w / 2),
+                                            int(t + box_h / 2),
+                                            (l, t, r, b), lambda p: p < 1)
+            # if no black pixel found, then no number in box
+            if not black_pixel:
+                sudoku_data.append(None)
+                continue
+            # get bounds of number
+            bounds = _get_bounds(pixels, black_pixel[0], black_pixel[1],
+                                (l, t, r, b), lambda p: p < 1)
+            # if bounds not found within box then no number in box
+            if not bounds:
+                sudoku_data.append(None)
+                continue
+            # perform OCR on number
+            cropped = img.crop(bounds)
+            temp = tempfile.NamedTemporaryFile(suffix='.pbm')
+            cropped.convert('1').save(temp.name)
+            gocr = subprocess.Popen(GOCR_CMD.split() + [temp.name],
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE)
+            temp.close()
+            result = gocr.communicate()[0]
+            # check result is valid
+            try:
+                result = int(result.strip())
+                if result in range(0, 10):
+                    sudoku_data.append(result)
+                else:
+                    sudoku_data.append(None)
+            except ValueError:
+                sudoku_data.append(None)
+    return sudoku_data
 
-def get_bounds(pixels, x, y, area, condition=lambda p: p < 1):
+def _get_bounds(pixels, x, y, area, condition=lambda p: p < 1):
     """ Extracts the bounds of a blob which contains
     pixel x, y and lies within specified area.
     A condition function can be specified to specify
@@ -67,7 +114,7 @@ def get_bounds(pixels, x, y, area, condition=lambda p: p < 1):
     return (l, t, r, b)
 
 
-def get_nearby_pixel(pixels, x, y, area, condition):
+def _get_nearby_pixel(pixels, x, y, area, condition):
     """ Gets a nearby pixel to pixel x, y that is within the
     specified area and matches the specified condition.
     Note: this does not necessarily return the closest
@@ -93,56 +140,6 @@ def get_nearby_pixel(pixels, x, y, area, condition):
         r = min(r + 1, ar - 1)
         b = min(b + 1, ab - 1)
     return None
-
-
-def parse_image(img):
-    """ Retrieves the sudoku data from the image.
-    """
-    img = img.convert('1') # convert to black and white
-    pixels = img.load()
-    sudoku_data = []
-    (w, h) = img.size
-    for row in range(0, 9):
-        for col in range(0, 9):
-            (box_w, box_h) = (float(w) / 9, float(h) / 9)
-            # get bounds of box
-            (l, t, r, b) = (int(col * box_w), int(row * box_h),
-                            int((col + 1) * box_w), int((row + 1) * box_h))
-            # get black pixel close to centre of box
-            black_pixel = get_nearby_pixel(pixels, int(l + box_w / 2),
-                                           int(t + box_h / 2),
-                                           (l, t, r, b), lambda p: p < 1)
-            # if no black pixel found, then no number in box
-            if not black_pixel:
-                sudoku_data.append(None)
-                continue
-            # get bounds of number
-            bounds = get_bounds(pixels, black_pixel[0], black_pixel[1],
-                               (l, t, r, b), lambda p: p < 1)
-            # if bounds not found within box then no number in box
-            if not bounds:
-                sudoku_data.append(None)
-                continue
-            # perform OCR on number
-            cropped = img.crop(bounds)
-            temp = tempfile.NamedTemporaryFile(suffix='.pbm')
-            cropped.convert('1').save(temp.name)
-            gocr = subprocess.Popen(GOCR_CMD.split() + [temp.name],
-                                    stdout=subprocess.PIPE,
-                                    stderr=subprocess.PIPE)
-            temp.close()
-            result = gocr.communicate()[0]
-            # check result is valid
-            try:
-                result = int(result.strip())
-                if result in range(0, 10):
-                    sudoku_data.append(result)
-                else:
-                    sudoku_data.append(None)
-            except ValueError:
-                sudoku_data.append(None)
-    return sudoku_data
-
 
 def solve(sudoku_data):
     """ Solves the sudoku using simple constraints programming.
@@ -174,7 +171,11 @@ def output(sudoku_data):
     """ Outputs the sudoku in rows and columns.
     """
     for row in range(0, 9):
+        if row in (3, 6):
+            print """------+-------+-------"""
         for col in range(0, 9):
+            if col in (3, 6):
+                print '|',
             print sudoku_data[row * 9 + col] or ' ',
         print '\n',
 
@@ -199,6 +200,7 @@ def main():
         sys.exit(0)
     print """Parsed as:"""
     output(parsed)
+    print '\n'
     solutions = solve(parsed)
     if not solutions:
         print """No solution found"""
@@ -209,6 +211,7 @@ def main():
         print """Solution:"""
     for solution in solutions:
         output(solution)
+        print '\n'
 
 
 if __name__ == '__main__':
