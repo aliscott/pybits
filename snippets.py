@@ -4,7 +4,6 @@ at some point.
 """
 
 __author__ = 'Ali Scott'
-__email__ = 'ali.scott@gmail.com'
 
 def get_class(name):
     """Retreives a class from a class name."""

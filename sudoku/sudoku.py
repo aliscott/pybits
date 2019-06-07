@@ -16,7 +16,6 @@ back to image.
 """
 
 __author__ = 'Ali Scott'
-__email__ = 'ali.scott@gmail.com'
 
 import os
 import tempfile
